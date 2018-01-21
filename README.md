@@ -4,7 +4,7 @@ This is a personal project for facebook auto upload using cron job.
 ## Install
 ``` bash
 
-npm install --save
+npm install --save https://github.com/ralphcrisostomo/node-facebook-auto-upload-photo
 
 ```
 
