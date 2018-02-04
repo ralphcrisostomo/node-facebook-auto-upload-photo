@@ -34,22 +34,37 @@ const API           = {
         };
     },
 
-    getFirstPhoto() {
+    getAllPhotos(option) {
+        let {is_single_upload} = option;
         return function (input, callback) {
             let { files }   = input;
             let photos      = _.remove(files, function (item) {
                 return _.includes(['jpg','png'],_.lowerCase(path.extname(item)));
             });
             if (photos.length) {
-                input.photo         = photos[0];
-                input.photo_name    = photos[0].replace(/\.[^/.]+$/, "");
-                console.log(chalk.cyan(`Found photo : `), chalk.green(`'${photos[0]}'`));
+                if (is_single_upload) {
+                    console.log(chalk.cyan(`Found photo : `), chalk.green(`'${photos[0]}'`));
+                    input.photos      = [{
+                        photo         : photos[0],
+                        photo_name    : photos[0].replace(/\.[^/.]+$/, "")
+                    }]
+                } else {
+                    input.photos         = _.map(photos, function (photo) {
+                        console.log(chalk.cyan(`Found photo : `), chalk.green(`'${photo}'`));
+                        return {
+                            photo       : photo,
+                            photo_name  : photo.replace(/\.[^/.]+$/, "")
+                        }
+                    });
+                }
                 return callback(null, input);
             } else {
                 return callback('NO_PHOTOS', null);
             }
         }
     },
+
+
 
     getFacebookLongLivedToken(options) {
         let { facebook_long_lived_token } = options;
@@ -65,40 +80,55 @@ const API           = {
     postOnFacebook(options) {
         let { source_dir, facebook_form_data, facebook_album_id, facebook_long_lived_token } = options;
         return function (input, callback) {
-            let { photo, photo_name } = input;
+            let {photos} = input;
+            let arr = [];
             console.log(chalk.cyan('Posting to facebook...'));
-            facebook_form_data = _.defaults(facebook_form_data, {
-                type    : "photo",
-                privacy : "{'value':'SELF'}",
-                caption : photo_name,
-                source  : fs.createReadStream(`${source_dir}/${photo}`)
+            let url = 'https://graph.facebook.com/v2.10/' + facebook_album_id + '/photos?access_token=' + facebook_long_lived_token;
+            _.each(photos, function (item) {
+                arr.push(function (callback) {
+                    facebook_form_data = _.defaults(facebook_form_data, {
+                        type    : "photo",
+                        privacy : "{'value':'SELF'}",
+                        caption : item.photo_name,
+                        source  : fs.createReadStream(`${source_dir}/${item.photo}`)
+                    });
+                    request.post({
+                        url: url,
+                        formData: facebook_form_data
+                    }, function(err, res, body) {
+                        console.log(chalk.green('Posted : ' + item.photo_name));
+                        body = JSON.parse(body);
+                        callback(body.error, {post_on_facebook_body : body});
+                    });
+                })
             });
 
-            let url = 'https://graph.facebook.com/v2.10/' + facebook_album_id + '/photos?access_token=' + facebook_long_lived_token;
-            request.post({
-                url: url,
-                formData: facebook_form_data
-            }, function(err, res, body) {
-                body = JSON.parse(body);
-                input.post_on_facebook_body = body;
-                callback(body.error, input);
+            async.parallel(arr, function (err, result) {
+                callback(err, input);
             });
         }
-
     },
+
+
 
     moveUploadedPhoto(options) {
         let { source_dir, uploaded_dir } = options;
         return function (input, callback) {
-            let { photo } = input;
-            console.log(chalk.cyan(`Moving uploaded file to`), chalk.green(`'${uploaded_dir}'`), chalk.cyan(`directory...`));
-            fs.move(`${source_dir}/${photo}`, `${uploaded_dir}/${photo}`, function(err, result){
-                input.move_photo_result = result;
-                return callback(err, input);
+            let { photos }  = input;
+            let arr         = [];
+            _.each(photos, function (item) {
+                arr.push(function (callback) {
+                    console.log(chalk.cyan(`Moving uploaded file ${item.photo_name}`), chalk.green(`'${uploaded_dir}'`), chalk.cyan(`directory...`));
+                    fs.move(`${source_dir}/${item.photo}`, `${uploaded_dir}/${item.photo}`, function(err, result){
+                        return callback(err, {move_photo_result : result});
+                    });
+                })
+            });
+            async.parallel(arr, function (err, result) {
+                callback(err, input);
             });
         }
     }
-
 };
 
 
@@ -114,7 +144,8 @@ const App =  function (options) {
         facebook_redirect_uri       : '',
         facebook_album_id           : '',
         facebook_long_lived_token   : '',
-        facebook_form_data          : {}
+        facebook_form_data          : {},
+        is_single_upload            : true
     });
 
     console.log('\n\n');
@@ -126,7 +157,7 @@ const App =  function (options) {
         console.log('---\n');
         async.waterfall([
             API.getFiles(options),
-            API.getFirstPhoto(),
+            API.getAllPhotos(options),
             API.getFacebookLongLivedToken(options),
             API.postOnFacebook(options),
             API.moveUploadedPhoto(options)
