@@ -1,6 +1,6 @@
 {
   "name": "facebook-auto-upload-photo",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "description": "This is a personal project for facebook auto upload using cron job.",
   "main": "index.js",
   "scripts": {
