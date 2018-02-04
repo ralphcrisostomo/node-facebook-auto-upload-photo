@@ -39,7 +39,7 @@ const API           = {
         return function (input, callback) {
             let { files }   = input;
             let photos      = _.remove(files, function (item) {
-                return _.includes(['jpg','png'],_.lowerCase(path.extname(item)));
+                return _.includes(['jpg','png','jpeg','avi','mp4','mkv','mov'],_.lowerCase(path.extname(item)));
             });
             if (photos.length) {
                 if (is_single_upload) {
